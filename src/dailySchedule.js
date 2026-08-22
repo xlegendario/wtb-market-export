@@ -60,15 +60,25 @@ export function localTimeIn(timezone, date = new Date()) {
  * met de zomertijd. Oplossing: plan de cron op beide kandidaat-UTC-tijden en
  * laat alleen de run doorgaan waarbij het lokaal het juiste uur is.
  *
- * `targetHour` leeg/NaN = altijd draaien (geen tijdslot-check).
+ * Accepteert meerdere uren: "12,20" voor een ochtend- en een avondrun.
+ * Leeg = altijd draaien (geen tijdslot-check).
  */
-export function isRunHour(targetHour, timezone, date = new Date()) {
-  if (targetHour === '' || targetHour == null) return true;
-  const target = Number(targetHour);
-  if (!Number.isInteger(target) || target < 0 || target > 23) {
-    throw new Error(`Ongeldige WTB_RUN_LOCAL_HOUR: "${targetHour}" (verwacht 0-23)`);
-  }
-  return localTimeIn(timezone, date).hour === target;
+export function parseRunHours(spec) {
+  const raw = String(spec ?? '').trim();
+  if (!raw) return [];
+  return raw.split(',').map((part) => {
+    const hour = Number(part.trim());
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      throw new Error(`Ongeldige WTB_RUN_LOCAL_HOUR: "${part.trim()}" (verwacht 0-23)`);
+    }
+    return hour;
+  });
+}
+
+export function isRunHour(spec, timezone, date = new Date()) {
+  const hours = parseRunHours(spec);
+  if (hours.length === 0) return true;
+  return hours.includes(localTimeIn(timezone, date).hour);
 }
 
 /**

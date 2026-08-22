@@ -21,7 +21,7 @@ if (useToday) {
     const now = localTimeIn(config.timezone);
     const clock = `${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')}`;
     console.log(
-      `Lokaal is het ${clock} (${config.timezone}), gepland uur is ${config.runLocalHour}:xx — niets te doen.`
+      `Lokaal is het ${clock} (${config.timezone}), geplande uren zijn ${config.runLocalHour} — niets te doen.`
     );
     process.exit(0);
   }
@@ -52,10 +52,14 @@ console.log(`\nProfiel:        ${summary.profile}${summary.dryRun ? '  (DRY RUN)
 console.log(`Airtable hits:  ${summary.records}`);
 console.log(`Unieke items:   ${summary.desired}`);
 console.log(`Al op lijst:    ${summary.currentOnList} (herkend: ${summary.listRecognized})`);
-console.log(`Toegevoegd:     ${summary.added.length}`);
-console.log(`Verwijderd:     ${summary.removed.length}`);
+const som = (rows, veld) => rows.reduce((n, r) => n + (r[veld] ?? 1), 0);
+console.log(`Toegevoegd:     ${som(summary.added, 'times')} paar over ${summary.added.length} maten`);
+console.log(`Verwijderd:     ${summary.removed.length} maten`);
 if (summary.readded.length) {
-  console.log(`Teruggezet:     ${summary.readded.length}  (maten die na een SKU-delete moesten blijven)`);
+  console.log(
+    `Teruggezet:     ${som(summary.readded, 'quantity')} paar over ${summary.readded.length} maten` +
+      '  (na een SKU-rebuild)'
+  );
 }
 console.log(`Overgeslagen:   ${summary.skipped.length}`);
 

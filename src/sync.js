@@ -2,7 +2,7 @@ import { config } from './config.js';
 import { listRecords } from './airtable.js';
 import { resolveProfile, EXPORT_FIELDS } from './profiles.js';
 import { WtbClient, parseList } from './wtbClient.js';
-import { normalizeSize, normalizeSku, pairKey } from './size.js';
+import { normalizeSize, normalizeSku, skuKey, pairKey } from './size.js';
 
 /**
  * Zet Airtable-records om naar unieke {sku, size} paren.
@@ -48,29 +48,71 @@ export function buildDesiredPairs(records, sizeMode) {
 }
 
 /**
- * WTB Market kent geen "verwijder één maat": /add met method:"delete" voegt juist
- * toe (getest 2026-08-22, quantity ging 1 -> 2). Het enige echte delete-endpoint
- * wist een hele SKU. Dus per SKU: alles weg, dan de gewenste maten terugzetten.
+ * Bepaalt per SKU wat er moet gebeuren.
+ *
+ * WTB Market kan alleen optellen (`/add` verhoogt de quantity) en een hele SKU
+ * wissen (`DELETE /delete`). Er is geen "verlaag met 1" en geen "verwijder één
+ * maat". Dus:
+ *
+ *   aantal te laag  -> zo vaak `add` als nodig
+ *   aantal te hoog  -> hele SKU wissen en in de juiste aantallen opnieuw opbouwen
+ *   maat moet weg   -> zelfde rebuild
+ *
+ * Zonder `prune` wordt er alleen bijgeteld, nooit gewist.
  */
-export function planRemovals(entries, desiredKeys) {
+export function planChanges({ desired, currentEntries, prune }) {
   const bySku = new Map();
-  for (const [key, entry] of entries) {
-    const skuKey = key.slice(0, key.lastIndexOf('|'));
-    if (!bySku.has(skuKey)) bySku.set(skuKey, { sku: entry.sku, sizes: [] });
-    bySku.get(skuKey).sizes.push({ key, size: entry.size });
+
+  const slot = (sku) => {
+    const key = skuKey(sku);
+    if (!bySku.has(key)) bySku.set(key, { sku, current: new Map(), desired: new Map() });
+    return bySku.get(key);
+  };
+
+  for (const entry of currentEntries.values()) {
+    slot(entry.sku).current.set(entry.size, entry.quantity);
   }
 
-  const plans = [];
-  for (const group of bySku.values()) {
-    const remove = group.sizes.filter((s) => !desiredKeys.has(s.key));
-    if (remove.length === 0) continue;
-    plans.push({
-      sku: group.sku,
-      remove: remove.map((s) => s.size),
-      keep: group.sizes.filter((s) => desiredKeys.has(s.key)).map((s) => s.size),
-    });
+  for (const item of desired) {
+    const group = slot(item.sku);
+    group.sku = item.sku; // Airtable bepaalt de schrijfwijze die we versturen
+    group.desired.set(item.size, { quantity: item.orders.length, orders: item.orders });
   }
-  return plans;
+
+  const rebuilds = [];
+  const adds = [];
+
+  for (const group of bySku.values()) {
+    const teVeel = [...group.current.entries()].filter(
+      ([size, qty]) => qty > (group.desired.get(size)?.quantity ?? 0)
+    );
+
+    if (teVeel.length > 0 && prune) {
+      rebuilds.push({
+        sku: group.sku,
+        removed: teVeel.map(([size, quantity]) => ({
+          size,
+          quantity,
+          wanted: group.desired.get(size)?.quantity ?? 0,
+        })),
+        sizes: [...group.desired.entries()].map(([size, d]) => ({
+          size,
+          quantity: d.quantity,
+          orders: d.orders,
+        })),
+      });
+      continue;
+    }
+
+    for (const [size, d] of group.desired) {
+      const have = group.current.get(size) ?? 0;
+      if (d.quantity > have) {
+        adds.push({ sku: group.sku, size, times: d.quantity - have, orders: d.orders });
+      }
+    }
+  }
+
+  return { rebuilds, adds };
 }
 
 export async function runProfile(profileName, options = {}) {
@@ -138,10 +180,6 @@ export async function runProfile(profileName, options = {}) {
   }
   summary.currentOnList = current.pairs.size;
 
-  const toAdd = desired.filter((p) => !current.pairs.has(p.key));
-
-  const desiredKeys = new Set(desired.map((p) => p.key));
-
   // Een leeg resultaat uit Airtable is bijna altijd een storing of een kapotte
   // formule, geen signaal dat de hele WTB-lijst leeg moet. Dus niet prunen,
   // tenzij expliciet toegestaan.
@@ -155,45 +193,54 @@ export async function runProfile(profileName, options = {}) {
     );
   }
 
-  const removalPlans =
-    prune && current.recognized && !emptyPruneBlocked
-      ? planRemovals(current.entries, desiredKeys)
-      : [];
+  const { rebuilds, adds } = planChanges({
+    desired,
+    currentEntries: current.entries,
+    prune: prune && current.recognized && !emptyPruneBlocked,
+  });
 
-  // Eerst opruimen, dan pas nieuwe items. Een SKU-rebuild raakt namelijk
-  // maten aan die anders meteen daarna nog eens toegevoegd zouden worden.
-  for (const plan of removalPlans) {
+  // Eerst de rebuilds. Die raken maten aan die anders daarna nog eens
+  // toegevoegd zouden worden.
+  for (const plan of rebuilds) {
     if (dryRun) {
-      for (const size of plan.remove) summary.removed.push({ sku: plan.sku, size, dryRun: true });
-      for (const size of plan.keep) summary.readded.push({ sku: plan.sku, size, dryRun: true });
+      for (const r of plan.removed) {
+        summary.removed.push({ sku: plan.sku, size: r.size, van: r.quantity, naar: r.wanted, dryRun: true });
+      }
+      for (const s of plan.sizes) {
+        summary.readded.push({ sku: plan.sku, size: s.size, quantity: s.quantity, dryRun: true });
+      }
       continue;
     }
+
     try {
       await client.deleteSku(plan.sku);
-      for (const size of plan.remove) summary.removed.push({ sku: plan.sku, size });
+      for (const r of plan.removed) {
+        summary.removed.push({ sku: plan.sku, size: r.size, van: r.quantity, naar: r.wanted });
+      }
     } catch (err) {
       summary.errors.push(`delete ${plan.sku}: ${err.message}`);
       continue; // niets terugzetten als het wissen niet lukte
     }
-    for (const size of plan.keep) {
+
+    for (const s of plan.sizes) {
       try {
-        await client.addSize(plan.sku, size);
-        summary.readded.push({ sku: plan.sku, size });
+        for (let i = 0; i < s.quantity; i++) await client.addSize(plan.sku, s.size);
+        summary.readded.push({ sku: plan.sku, size: s.size, quantity: s.quantity });
       } catch (err) {
-        // Volgende run zet 'm alsnog terug: hij mist dan simpelweg op de lijst.
-        summary.errors.push(`terugzetten ${plan.sku} ${size}: ${err.message}`);
+        // Volgende run herstelt dit: de maat mist dan simpelweg op de lijst.
+        summary.errors.push(`terugzetten ${plan.sku} ${s.size}: ${err.message}`);
       }
     }
   }
 
-  for (const item of toAdd) {
+  for (const item of adds) {
     if (dryRun) {
-      summary.added.push({ sku: item.sku, size: item.size, orders: item.orders, dryRun: true });
+      summary.added.push({ ...item, dryRun: true });
       continue;
     }
     try {
-      await client.addSize(item.sku, item.size);
-      summary.added.push({ sku: item.sku, size: item.size, orders: item.orders });
+      for (let i = 0; i < item.times; i++) await client.addSize(item.sku, item.size);
+      summary.added.push(item);
     } catch (err) {
       summary.errors.push(`add ${item.sku} ${item.size}: ${err.message}`);
     }

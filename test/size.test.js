@@ -69,6 +69,7 @@ test('parseList bewaart de originele sku/size om mee te verwijderen', () => {
   assert.deepEqual(parsed.entries.get('CV1659-001|41 1/3'), {
     sku: 'cv1659-001',
     size: '41 1/3',
+    quantity: 1,
   });
 });
 
@@ -125,7 +126,11 @@ test('parseList leest de echte WTB Market response (vastgelegd 2026-08-22)', () 
   const parsed = parseList(echt);
   assert.equal(parsed.recognized, true);
   assert.deepEqual([...parsed.pairs], ['IF1787-100|39']);
-  assert.deepEqual(parsed.entries.get('IF1787-100|39'), { sku: 'IF1787-100', size: '39' });
+  assert.deepEqual(parsed.entries.get('IF1787-100|39'), {
+    sku: 'IF1787-100',
+    size: '39',
+    quantity: 1,
+  });
 });
 
 test('parseList pakt meerdere maten per SKU', () => {

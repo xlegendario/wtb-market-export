@@ -162,10 +162,12 @@ export function parseList(payload) {
   const skus = new Set();
   const entries = new Map();
 
-  const add = (sku, size) => {
+  const add = (sku, size, quantity = 1) => {
     const key = pairKey(sku, size);
     pairs.add(key);
-    if (!entries.has(key)) entries.set(key, { sku: normalizeSku(sku), size: String(size).trim() });
+    if (!entries.has(key)) {
+      entries.set(key, { sku: normalizeSku(sku), size: String(size).trim(), quantity });
+    }
   };
 
   // Een envelope met ok:false bevat geen lijst — niet als "leeg" behandelen.
@@ -184,7 +186,7 @@ export function parseList(payload) {
       if (!sku) continue;
       recognized = true;
       skus.add(skuKey(sku));
-      for (const size of collectSizes(entry)) add(sku, size);
+      for (const s of collectSizes(entry)) add(sku, s.size, s.quantity);
     }
     return { recognized, pairs, skus, entries };
   }
@@ -196,7 +198,10 @@ export function parseList(payload) {
       if (!sku || !Array.isArray(value)) continue;
       recognized = true;
       skus.add(skuKey(sku));
-      for (const size of value) add(sku, normalizeListSize(size));
+      for (const raw of value) {
+        const s = normalizeListSize(raw);
+        add(sku, s.size, s.quantity);
+      }
     }
     return { recognized, pairs, skus, entries };
   }
@@ -219,13 +224,20 @@ function collectSizes(entry) {
   const raw = entry.sizes ?? entry.size ?? entry.Size ?? entry.Sizes;
   if (raw == null) return [];
   const values = Array.isArray(raw) ? raw : [raw];
-  return values.map(normalizeListSize).filter(Boolean);
+  return values.map(normalizeListSize).filter((s) => s.size);
 }
 
+/**
+ * WTB Market levert maten als { size, quantity }. Een kale string telt als 1.
+ */
 function normalizeListSize(value) {
-  if (value == null) return '';
+  if (value == null) return { size: '', quantity: 1 };
   if (typeof value === 'object') {
-    return String(value.size ?? value.name ?? value.value ?? '').trim();
+    const qty = Number(value.quantity ?? value.qty ?? 1);
+    return {
+      size: String(value.size ?? value.name ?? value.value ?? '').trim(),
+      quantity: Number.isFinite(qty) && qty > 0 ? qty : 1,
+    };
   }
-  return String(value).trim();
+  return { size: String(value).trim(), quantity: 1 };
 }

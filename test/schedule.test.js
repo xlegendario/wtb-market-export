@@ -6,6 +6,7 @@ import {
   profileForToday,
   localTimeIn,
   isRunHour,
+  parseRunHours,
 } from '../src/dailySchedule.js';
 
 const TZ = 'Europe/Amsterdam';
@@ -68,4 +69,30 @@ test('lege WTB_RUN_LOCAL_HOUR = geen tijdslot-check', () => {
 test('isRunHour weigert onzin i.p.v. stil altijd te draaien', () => {
   assert.throws(() => isRunHour('half een', 'Europe/Amsterdam'), /Ongeldige/);
   assert.throws(() => isRunHour('25', 'Europe/Amsterdam'), /Ongeldige/);
+});
+
+test('meerdere uren: een ochtend- en een avondrun', () => {
+  // Cron "30 10,11,18,19 * * *" met WTB_RUN_LOCAL_HOUR=12,20
+  const zomer = '2026-08-24T';
+  const draait = (u) => isRunHour('12,20', TZ, new Date(zomer + u + ':00Z'));
+  assert.equal(draait('10:30'), true); // 12:30 NL
+  assert.equal(draait('11:30'), false); // 13:30 NL
+  assert.equal(draait('18:30'), true); // 20:30 NL
+  assert.equal(draait('19:30'), false); // 21:30 NL
+
+  const winter = '2026-12-14T';
+  const draaitW = (u) => isRunHour('12,20', TZ, new Date(winter + u + ':00Z'));
+  assert.equal(draaitW('10:30'), false); // 11:30 NL
+  assert.equal(draaitW('11:30'), true); // 12:30 NL
+  assert.equal(draaitW('18:30'), false); // 19:30 NL
+  assert.equal(draaitW('19:30'), true); // 20:30 NL
+});
+
+test('spaties rond de uren zijn toegestaan', () => {
+  assert.deepEqual(parseRunHours(' 12 , 20 '), [12, 20]);
+  assert.deepEqual(parseRunHours(''), []);
+});
+
+test('een ongeldig uur in de lijst wordt geweigerd', () => {
+  assert.throws(() => parseRunHours('12,25'), /Ongeldige/);
 });
