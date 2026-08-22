@@ -114,8 +114,22 @@ export async function runProfile(profileName, options = {}) {
   const toAdd = desired.filter((p) => !current.pairs.has(p.key));
 
   const desiredKeys = new Set(desired.map((p) => p.key));
+
+  // Een leeg resultaat uit Airtable is bijna altijd een storing of een kapotte
+  // formule, geen signaal dat de hele WTB-lijst leeg moet. Dus niet prunen,
+  // tenzij expliciet toegestaan.
+  const emptyPruneBlocked =
+    prune && desired.length === 0 && current.pairs.size > 0 && !config.allowEmptyPrune;
+
+  if (emptyPruneBlocked) {
+    summary.errors.push(
+      `Prunen overgeslagen: Airtable gaf 0 items terwijl er ${current.pairs.size} op de lijst staan. ` +
+        'Zet WTB_ALLOW_EMPTY_PRUNE=true als dit wel de bedoeling is.'
+    );
+  }
+
   const toRemove =
-    prune && current.recognized
+    prune && current.recognized && !emptyPruneBlocked
       ? [...current.pairs].filter((key) => !desiredKeys.has(key))
       : [];
 

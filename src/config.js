@@ -36,6 +36,10 @@ export const config = {
   // 'raw' = ongewijzigd (default) | 'eu' = 41 1/3 -> 41 | 'dewu' = als Dewu Size Normalized
   sizeMode: (process.env.WTB_SIZE_MODE || 'raw').toLowerCase(),
 
+  // Veiligheidsklep: prunen terwijl er niets gewenst is zou de hele WTB-lijst
+  // wissen. Dat is bijna altijd een Airtable-storing, geen echte lege lijst.
+  allowEmptyPrune: bool(process.env.WTB_ALLOW_EMPTY_PRUNE, false),
+
   runSecret: process.env.RUN_SECRET || '',
   dryRunDefault: bool(process.env.DRY_RUN, false),
 

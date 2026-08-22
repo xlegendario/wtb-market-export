@@ -102,3 +102,38 @@ test('parseList behandelt ok:false niet als een lege lijst', () => {
   assert.equal(parsed.recognized, false);
   assert.equal(parsed.pairs.size, 0);
 });
+
+test('parseList leest de echte WTB Market response (vastgelegd 2026-08-22)', () => {
+  // Letterlijk gekopieerd uit een Render-run. sizes is een array van objecten
+  // met size + quantity, niet een array van strings.
+  const echt = {
+    ok: true,
+    data: [
+      {
+        sku: 'IF1787-100',
+        slug: 'nike-p-6000-gold-womens',
+        name: "Nike P-6000 Gold (Women's)",
+        image: 'https://images.stockx.com/images/Nike-P-6000-Gold-Womens-Product.jpg',
+        brand: 'nike',
+        sizes: [{ size: '39', quantity: 1 }],
+      },
+    ],
+    meta: {},
+    error: null,
+  };
+
+  const parsed = parseList(echt);
+  assert.equal(parsed.recognized, true);
+  assert.deepEqual([...parsed.pairs], ['IF1787-100|39']);
+  assert.deepEqual(parsed.entries.get('IF1787-100|39'), { sku: 'IF1787-100', size: '39' });
+});
+
+test('parseList pakt meerdere maten per SKU', () => {
+  const parsed = parseList({
+    ok: true,
+    data: [{ sku: 'IF1787-100', sizes: [{ size: '39', quantity: 1 }, { size: '42.5', quantity: 2 }] }],
+    meta: {},
+    error: null,
+  });
+  assert.deepEqual([...parsed.pairs].sort(), ['IF1787-100|39', 'IF1787-100|42.5']);
+});
