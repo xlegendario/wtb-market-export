@@ -10,6 +10,15 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Fout waarop opnieuw proberen zinloos is (onze fout, niet die van het netwerk). */
+function fatal(message) {
+  return Object.assign(new Error(message), { retryable: false });
+}
+
+function describe(text) {
+  return String(text || '').slice(0, 300);
+}
+
 export class WtbClient {
   constructor(cfg) {
     this.baseUrl = cfg.baseUrl;
@@ -57,30 +66,38 @@ export class WtbClient {
         const text = await res.text().catch(() => '');
 
         if (res.status === 429 || res.status >= 500) {
-          lastError = new Error(`WTB ${res.status} ${res.statusText}: ${text.slice(0, 300)}`);
+          lastError = new Error(`WTB ${res.status} ${res.statusText}: ${describe(text)}`);
           await sleep(500 * 2 ** attempt);
           continue;
         }
 
         if (!res.ok) {
-          // 4xx = onze fout, geen retry.
-          throw new Error(`WTB ${res.status} ${res.statusText}: ${text.slice(0, 300)}`);
+          throw fatal(`WTB ${res.status} ${res.statusText}: ${describe(text)}`);
         }
 
-        if (!text) return { ok: true, raw: '', json: null };
+        if (!text) return { raw: '', json: null };
+
+        let json = null;
         try {
-          return { ok: true, raw: text, json: JSON.parse(text) };
+          json = JSON.parse(text);
         } catch {
-          return { ok: true, raw: text, json: null };
+          return { raw: text, json: null };
         }
+
+        // De API antwoordt met { ok, data, meta, error }. Een 200 met ok:false
+        // is een mislukking — die mag niet als succes doorgaan.
+        if (json && json.ok === false) {
+          throw fatal(`WTB ${json.error?.code || 'ERROR'}: ${json.error?.message || describe(text)}`);
+        }
+
+        return { raw: text, json };
       } catch (err) {
+        if (err.retryable === false) throw err;
         if (err.name === 'AbortError') {
           lastError = new Error(`WTB timeout na ${this.timeoutMs}ms op ${path}`);
-          await sleep(500 * 2 ** attempt);
-          continue;
+        } else {
+          lastError = err;
         }
-        if (String(err.message).startsWith('WTB 4')) throw err;
-        lastError = err;
         await sleep(500 * 2 ** attempt);
       } finally {
         clearTimeout(timer);
@@ -144,6 +161,11 @@ export function parseList(payload) {
     if (!entries.has(key)) entries.set(key, { sku: normalizeSku(sku), size: String(size).trim() });
   };
 
+  // Een envelope met ok:false bevat geen lijst — niet als "leeg" behandelen.
+  if (payload && typeof payload === 'object' && payload.ok === false) {
+    return { recognized: false, pairs, skus, entries };
+  }
+
   const root = unwrap(payload);
   if (root == null) return { recognized: false, pairs, skus, entries };
 
@@ -179,7 +201,8 @@ function unwrap(payload) {
   if (payload == null) return null;
   if (Array.isArray(payload)) return payload;
   if (typeof payload !== 'object') return null;
-  for (const key of ['list', 'data', 'items', 'result', 'results', 'products']) {
+  // `data` eerst: dat is het veld in WTB Market's { ok, data, meta, error } envelope.
+  for (const key of ['data', 'list', 'items', 'result', 'results', 'products']) {
     if (payload[key] != null) return payload[key];
   }
   return payload;

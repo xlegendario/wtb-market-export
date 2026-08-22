@@ -44,6 +44,9 @@ export const config = {
 
   // Voor `run-profile.js --today` (Render Cron Job): "mon=fresh-24h, wed=aging-72h, default=ready"
   dailyProfiles: process.env.WTB_DAILY_PROFILES || '',
+
+  // Zomertijd-vangnet: draai alleen als het lokaal dit uur is. Zie isRunHour().
+  runLocalHour: process.env.WTB_RUN_LOCAL_HOUR ?? '',
   timezone: process.env.TZ || 'Europe/Amsterdam',
 };
 

@@ -77,3 +77,28 @@ test('parseList geeft recognized=false bij een onbekende vorm', () => {
   assert.equal(parseList(null).recognized, false);
   assert.equal(parseList('').recognized, false);
 });
+
+test('parseList begrijpt WTB Market\'s { ok, data } envelope', () => {
+  const parsed = parseList({
+    ok: true,
+    data: [{ sku: 'CV1659-001', sizes: ['39', '40'] }],
+    meta: {},
+    error: null,
+  });
+  assert.equal(parsed.recognized, true);
+  assert.ok(parsed.pairs.has('CV1659-001|39'));
+  assert.ok(parsed.pairs.has('CV1659-001|40'));
+});
+
+test('parseList behandelt ok:false niet als een lege lijst', () => {
+  // Anders zou een auth-fout eruitzien als "lijst is leeg" en zou prunen
+  // de hele WTB-lijst wissen.
+  const parsed = parseList({
+    ok: false,
+    data: null,
+    meta: {},
+    error: { code: 'NOT_FOUND', message: 'API credentials not found' },
+  });
+  assert.equal(parsed.recognized, false);
+  assert.equal(parsed.pairs.size, 0);
+});

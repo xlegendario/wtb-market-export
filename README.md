@@ -70,8 +70,18 @@ WTB_DAILY_PROFILES=mon=fresh-24h, wed=aging-72h, fri=all-open, default=ready
 Render's UTC) en draait het bijbehorende profiel. Geen entry voor vandaag en geen
 `default`? Dan exit hij netjes met code 0 zonder iets te doen.
 
-Render's cron schedules staan in **UTC**: `0 10 * * *` is 12:00 in Amsterdam
-tijdens zomertijd, 11:00 in wintertijd.
+### Zomertijd
+
+Render's cron schedules staan in **UTC**, dus een vast schema verschuift een uur
+mee met de zomertijd. 12:30 NL is 10:30 UTC in de zomer en 11:30 UTC in de winter.
+
+Daarom staat de cron op **beide** tijden (`30 10,11 * * *`) en laat
+`WTB_RUN_LOCAL_HOUR=12` alleen de run door waarbij het lokaal 12:xx is. De andere
+run stopt binnen een seconde zonder iets te doen. 12:30 klopt zo het hele jaar,
+zonder dat je twee keer per jaar iets moet verzetten.
+
+Wil je die check niet, laat `WTB_RUN_LOCAL_HOUR` dan leeg — dan draait elke
+geplande run gewoon.
 
 ### Alternatief: als long-running service
 

@@ -43,6 +43,34 @@ export function weekdayIn(timezone, date = new Date()) {
   return DAYS.includes(short) ? short : DAYS[date.getUTCDay()];
 }
 
+/** Lokale klok (uur/minuut) in de opgegeven tijdzone. */
+export function localTimeIn(timezone, date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: timezone,
+  }).formatToParts(date);
+  const get = (type) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return { hour: get('hour') % 24, minute: get('minute') };
+}
+
+/**
+ * Render's cron schedules staan in UTC, dus een vast schema verschuift een uur
+ * met de zomertijd. Oplossing: plan de cron op beide kandidaat-UTC-tijden en
+ * laat alleen de run doorgaan waarbij het lokaal het juiste uur is.
+ *
+ * `targetHour` leeg/NaN = altijd draaien (geen tijdslot-check).
+ */
+export function isRunHour(targetHour, timezone, date = new Date()) {
+  if (targetHour === '' || targetHour == null) return true;
+  const target = Number(targetHour);
+  if (!Number.isInteger(target) || target < 0 || target > 23) {
+    throw new Error(`Ongeldige WTB_RUN_LOCAL_HOUR: "${targetHour}" (verwacht 0-23)`);
+  }
+  return localTimeIn(timezone, date).hour === target;
+}
+
 /**
  * Welk profiel hoort bij vandaag? `null` = vandaag niets doen.
  */

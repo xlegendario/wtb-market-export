@@ -2,7 +2,7 @@
 import { config, assertConfig } from '../src/config.js';
 import { listProfiles } from '../src/profiles.js';
 import { runProfile } from '../src/sync.js';
-import { profileForToday } from '../src/dailySchedule.js';
+import { profileForToday, isRunHour, localTimeIn } from '../src/dailySchedule.js';
 
 const args = process.argv.slice(2);
 const flags = new Set(args.filter((a) => a.startsWith('-')));
@@ -13,6 +13,17 @@ const useToday = flags.has('--today');
 let profileName = args.find((a) => !a.startsWith('-'));
 
 if (useToday) {
+  // Render's cron staat in UTC. We plannen beide kandidaat-tijden en laten
+  // alleen de run doorgaan die lokaal in het juiste uur valt.
+  if (!isRunHour(config.runLocalHour, config.timezone)) {
+    const now = localTimeIn(config.timezone);
+    const clock = `${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')}`;
+    console.log(
+      `Lokaal is het ${clock} (${config.timezone}), gepland uur is ${config.runLocalHour}:xx — niets te doen.`
+    );
+    process.exit(0);
+  }
+
   // Eén Render Cron Job kan zo elke dag een ander profiel draaien.
   const { day, profile } = profileForToday(config.dailyProfiles, config.timezone);
   if (!profile) {

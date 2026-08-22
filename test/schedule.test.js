@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseDailyProfiles, weekdayIn, profileForToday } from '../src/dailySchedule.js';
+import {
+  parseDailyProfiles,
+  weekdayIn,
+  profileForToday,
+  localTimeIn,
+  isRunHour,
+} from '../src/dailySchedule.js';
 
 const TZ = 'Europe/Amsterdam';
 
@@ -35,4 +41,31 @@ test('profileForToday pakt de dag, valt terug op default', () => {
 
 test('lege config = niets draaien', () => {
   assert.equal(profileForToday('', TZ).profile, null);
+});
+
+test('12:30 NL blijft 12:30 NL, ook na de overgang naar wintertijd', () => {
+  // Cron staat op "30 10,11 * * *" (UTC). Precies één van de twee mag door.
+  const zomer = { utc1030: new Date('2026-08-24T10:30:00Z'), utc1130: new Date('2026-08-24T11:30:00Z') };
+  assert.equal(localTimeIn('Europe/Amsterdam', zomer.utc1030).hour, 12);
+  assert.equal(isRunHour('12', 'Europe/Amsterdam', zomer.utc1030), true);
+  assert.equal(isRunHour('12', 'Europe/Amsterdam', zomer.utc1130), false);
+
+  const winter = { utc1030: new Date('2026-12-14T10:30:00Z'), utc1130: new Date('2026-12-14T11:30:00Z') };
+  assert.equal(isRunHour('12', 'Europe/Amsterdam', winter.utc1030), false);
+  assert.equal(isRunHour('12', 'Europe/Amsterdam', winter.utc1130), true);
+});
+
+test('isRunHour tolereert een late cron binnen hetzelfde uur', () => {
+  const laat = new Date('2026-08-24T10:55:00Z'); // 12:55 NL
+  assert.equal(isRunHour('12', 'Europe/Amsterdam', laat), true);
+});
+
+test('lege WTB_RUN_LOCAL_HOUR = geen tijdslot-check', () => {
+  assert.equal(isRunHour('', 'Europe/Amsterdam', new Date('2026-08-24T03:00:00Z')), true);
+  assert.equal(isRunHour(null, 'Europe/Amsterdam', new Date()), true);
+});
+
+test('isRunHour weigert onzin i.p.v. stil altijd te draaien', () => {
+  assert.throws(() => isRunHour('half een', 'Europe/Amsterdam'), /Ongeldige/);
+  assert.throws(() => isRunHour('25', 'Europe/Amsterdam'), /Ongeldige/);
 });

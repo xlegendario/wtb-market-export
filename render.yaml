@@ -1,20 +1,25 @@
 # Render Cron Job: draait één keer per dag, doet zijn werk, en stopt.
 # Geen always-on instance nodig.
 #
-# LET OP: Render's cron schedules staan in UTC. "0 10 * * *" is 12:00 in
-# Amsterdam tijdens zomertijd en 11:00 tijdens wintertijd. Wil je het hele jaar
-# strak op 12:00, pas het schema dan twee keer per jaar aan.
+# ZOMERTIJD
+# Render's cron schedules staan in UTC. 12:30 Nederlandse tijd is 10:30 UTC in
+# de zomer en 11:30 UTC in de winter. Daarom plannen we beide tijden, en laat
+# `--today` alleen de run doorgaan waarbij het lokaal 12:xx is
+# (WTB_RUN_LOCAL_HOUR). De andere run stopt binnen een seconde zonder iets te
+# doen. Zo klopt 12:30 het hele jaar zonder dat je iets hoeft te verzetten.
 services:
   - type: cron
     name: wtb-market-export
     runtime: node
     plan: starter
-    schedule: '0 10 * * *'
+    schedule: '30 10,11 * * *'
     buildCommand: npm install
     startCommand: node scripts/run-profile.js --today
     envVars:
       - key: TZ
         value: Europe/Amsterdam
+      - key: WTB_RUN_LOCAL_HOUR
+        value: '12'
       - key: AIRTABLE_ORDERS_TABLE
         value: Unfulfilled Orders Log
       - key: WTB_API_BASE_URL
