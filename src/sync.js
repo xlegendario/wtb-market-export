@@ -64,6 +64,7 @@ export async function runProfile(profileName, options = {}) {
     desired: 0,
     currentOnList: 0,
     listRecognized: null,
+    listRaw: null,
     added: [],
     removed: [],
     skipped: [],
@@ -96,6 +97,8 @@ export async function runProfile(profileName, options = {}) {
   let current = { recognized: false, pairs: new Set(), skus: new Set(), entries: new Map() };
   try {
     const res = await client.getList();
+    // Bewaard om de exacte vorm te kunnen inspecteren (bevat geen credentials).
+    summary.listRaw = String(res.raw ?? '').slice(0, 2000);
     current = parseList(res.json ?? res.raw);
     summary.listRecognized = current.recognized;
     if (!current.recognized) {

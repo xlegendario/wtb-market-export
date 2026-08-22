@@ -9,13 +9,15 @@ const flags = new Set(args.filter((a) => a.startsWith('-')));
 const dryRun = flags.has('--dry-run');
 const prune = flags.has('--prune') ? true : flags.has('--no-prune') ? false : undefined;
 const useToday = flags.has('--today');
+const force = flags.has('--force');
+const showList = flags.has('--show-list');
 
 let profileName = args.find((a) => !a.startsWith('-'));
 
 if (useToday) {
   // Render's cron staat in UTC. We plannen beide kandidaat-tijden en laten
   // alleen de run doorgaan die lokaal in het juiste uur valt.
-  if (!isRunHour(config.runLocalHour, config.timezone)) {
+  if (!force && !isRunHour(config.runLocalHour, config.timezone)) {
     const now = localTimeIn(config.timezone);
     const clock = `${String(now.hour).padStart(2, '0')}:${String(now.minute).padStart(2, '0')}`;
     console.log(
@@ -53,6 +55,13 @@ console.log(`Al op lijst:    ${summary.currentOnList} (herkend: ${summary.listRe
 console.log(`Toegevoegd:     ${summary.added.length}`);
 console.log(`Verwijderd:     ${summary.removed.length}`);
 console.log(`Overgeslagen:   ${summary.skipped.length}`);
+
+if (showList) {
+  console.log('');
+  console.log('--- ruwe /user/list/manage/get response ---');
+  console.log(summary.listRaw || '(leeg)');
+  console.log('--- einde response ---');
+}
 
 if (summary.skipped.length) {
   console.log('\nOvergeslagen records:');

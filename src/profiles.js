@@ -18,6 +18,17 @@ function and(...clauses) {
   return `AND(${clauses.filter(Boolean).join(',\n')})`;
 }
 
+/** Waarde veilig in een Airtable-formule zetten. */
+function quote(value) {
+  // JSON-escaping dekt precies wat Airtable nodig heeft: quotes en backslashes.
+  return JSON.stringify(String(value));
+}
+
+// Testprofiel: één bekend item, om de koppeling te verifiëren zonder de echte
+// lijst vol te zetten. Overschrijfbaar via env, zonder code te wijzigen.
+const TEST_SKU = process.env.WTB_TEST_SKU || 'IF1787-100';
+const TEST_SIZE = process.env.WTB_TEST_SIZE || '39';
+
 /** Velden die we uit Airtable ophalen (klein houden = sneller). */
 export const EXPORT_FIELDS = [
   'Order ID',
@@ -59,6 +70,15 @@ export const PROFILES = {
       OPEN_OUTSOURCE,
       '{Outsource Start Time} != BLANK()',
       `DATETIME_DIFF(NOW(), {Outsource Start Time}, 'hours') >= 72`
+    ),
+  },
+
+  'test-single': {
+    description: `Test: alleen SKU ${TEST_SKU} maat ${TEST_SIZE} in Outsource. Niet voor productie.`,
+    formula: and(
+      '{Fulfillment Status} = "Outsource"',
+      `{SKU} = ${quote(TEST_SKU)}`,
+      `{Size} = ${quote(TEST_SIZE)}`
     ),
   },
 
