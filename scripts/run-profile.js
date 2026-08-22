@@ -54,6 +54,9 @@ console.log(`Unieke items:   ${summary.desired}`);
 console.log(`Al op lijst:    ${summary.currentOnList} (herkend: ${summary.listRecognized})`);
 console.log(`Toegevoegd:     ${summary.added.length}`);
 console.log(`Verwijderd:     ${summary.removed.length}`);
+if (summary.readded.length) {
+  console.log(`Teruggezet:     ${summary.readded.length}  (maten die na een SKU-delete moesten blijven)`);
+}
 console.log(`Overgeslagen:   ${summary.skipped.length}`);
 
 if (showList) {
