@@ -120,13 +120,13 @@ export class WtbClient {
     });
   }
 
-  /** Eén maat van een SKU verwijderen (SKU blijft staan als er andere maten zijn). */
-  async removeSize(sku, size) {
-    return this.request(ENDPOINTS.add, {
-      method: 'POST',
-      body: { sku: normalizeSku(sku), size: String(size), method: 'delete' },
-    });
-  }
+  /**
+   * LET OP: /add met `method: "delete"` verwijdert NIETS. Getest op 2026-08-22:
+   * de quantity ging van 1 naar 2. Het endpoint voegt altijd toe, ongeacht
+   * `method`. Gebruik daarom deleteSku() en bouw de gewenste maten opnieuw op.
+   *
+   * Dit betekent ook dat een tweede `add` op dezelfde maat de quantity ophoogt.
+   */
 
   /** Hele SKU (alle maten) van de lijst halen. */
   async deleteSku(sku) {

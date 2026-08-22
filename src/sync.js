@@ -47,6 +47,32 @@ export function buildDesiredPairs(records, sizeMode) {
   return { pairs, skipped };
 }
 
+/**
+ * WTB Market kent geen "verwijder één maat": /add met method:"delete" voegt juist
+ * toe (getest 2026-08-22, quantity ging 1 -> 2). Het enige echte delete-endpoint
+ * wist een hele SKU. Dus per SKU: alles weg, dan de gewenste maten terugzetten.
+ */
+export function planRemovals(entries, desiredKeys) {
+  const bySku = new Map();
+  for (const [key, entry] of entries) {
+    const skuKey = key.slice(0, key.lastIndexOf('|'));
+    if (!bySku.has(skuKey)) bySku.set(skuKey, { sku: entry.sku, sizes: [] });
+    bySku.get(skuKey).sizes.push({ key, size: entry.size });
+  }
+
+  const plans = [];
+  for (const group of bySku.values()) {
+    const remove = group.sizes.filter((s) => !desiredKeys.has(s.key));
+    if (remove.length === 0) continue;
+    plans.push({
+      sku: group.sku,
+      remove: remove.map((s) => s.size),
+      keep: group.sizes.filter((s) => desiredKeys.has(s.key)).map((s) => s.size),
+    });
+  }
+  return plans;
+}
+
 export async function runProfile(profileName, options = {}) {
   const startedAt = new Date().toISOString();
   const dryRun = options.dryRun ?? config.dryRunDefault;
@@ -67,6 +93,7 @@ export async function runProfile(profileName, options = {}) {
     listRaw: null,
     added: [],
     removed: [],
+    readded: [],
     skipped: [],
     errors: [],
   };
@@ -128,10 +155,36 @@ export async function runProfile(profileName, options = {}) {
     );
   }
 
-  const toRemove =
+  const removalPlans =
     prune && current.recognized && !emptyPruneBlocked
-      ? [...current.pairs].filter((key) => !desiredKeys.has(key))
+      ? planRemovals(current.entries, desiredKeys)
       : [];
+
+  // Eerst opruimen, dan pas nieuwe items. Een SKU-rebuild raakt namelijk
+  // maten aan die anders meteen daarna nog eens toegevoegd zouden worden.
+  for (const plan of removalPlans) {
+    if (dryRun) {
+      for (const size of plan.remove) summary.removed.push({ sku: plan.sku, size, dryRun: true });
+      for (const size of plan.keep) summary.readded.push({ sku: plan.sku, size, dryRun: true });
+      continue;
+    }
+    try {
+      await client.deleteSku(plan.sku);
+      for (const size of plan.remove) summary.removed.push({ sku: plan.sku, size });
+    } catch (err) {
+      summary.errors.push(`delete ${plan.sku}: ${err.message}`);
+      continue; // niets terugzetten als het wissen niet lukte
+    }
+    for (const size of plan.keep) {
+      try {
+        await client.addSize(plan.sku, size);
+        summary.readded.push({ sku: plan.sku, size });
+      } catch (err) {
+        // Volgende run zet 'm alsnog terug: hij mist dan simpelweg op de lijst.
+        summary.errors.push(`terugzetten ${plan.sku} ${size}: ${err.message}`);
+      }
+    }
+  }
 
   for (const item of toAdd) {
     if (dryRun) {
@@ -143,21 +196,6 @@ export async function runProfile(profileName, options = {}) {
       summary.added.push({ sku: item.sku, size: item.size, orders: item.orders });
     } catch (err) {
       summary.errors.push(`add ${item.sku} ${item.size}: ${err.message}`);
-    }
-  }
-
-  for (const key of toRemove) {
-    // Stuur exact terug wat WTB Market zelf teruggaf, niet onze diff-sleutel.
-    const { sku, size } = current.entries.get(key);
-    if (dryRun) {
-      summary.removed.push({ sku, size, dryRun: true });
-      continue;
-    }
-    try {
-      await client.removeSize(sku, size);
-      summary.removed.push({ sku, size });
-    } catch (err) {
-      summary.errors.push(`remove ${sku} ${size}: ${err.message}`);
     }
   }
 
