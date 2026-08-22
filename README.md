@@ -25,6 +25,26 @@ draaien doet de tweede keer niets.
 | `fresh-24h`  | Order Date binnen 24 uur |
 | `aging-72h`  | 72+ uur in outsource |
 | `high-value` | Inkoopprijs >= `WTB_HIGH_VALUE_MIN` |
+| `rotating`   | **Productieprofiel.** Outsource, niet van `WTB_EXCLUDE_STORE`, met een aan/uit/aan-venster op `Created Time` |
+
+### Het rotating-profiel
+
+WTB Market klaagt als je dagenlang exact dezelfde lijst blijft tonen. Daarom
+staat een order niet onafgebroken op de lijst, maar in twee blokken:
+
+```
+0-48u   erin      (WTB_WINDOW_A_END)
+48-72u  eruit     (de pauze)
+72-96u  weer erin (WTB_WINDOW_B_START .. WTB_WINDOW_B_END)
+>96u    er niet meer op
+```
+
+Zo staan de nieuwste orders er altijd op en krijgt een oudere order op dag 4
+nog één kans. `Store Name` is een lookup, dus de uitsluiting gebruikt
+`ARRAYJOIN()` — een kale `!=` op een lookup is onbetrouwbaar.
+
+**Dit profiel werkt alleen met prunen aan.** Zonder `WTB_PRUNE_PROFILES=rotating`
+gaat er nooit iets van de lijst af en bestaat de pauze dus niet.
 
 Alle profielen filteren sowieso op `Fulfillment Status = "Outsource"`,
 `Outsourced? = 0` en een gevulde SKU + Size. Nieuwe profielen: één entry

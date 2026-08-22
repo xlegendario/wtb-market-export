@@ -29,6 +29,17 @@ function quote(value) {
 const TEST_SKU = process.env.WTB_TEST_SKU || 'IF1787-100';
 const TEST_SIZE = process.env.WTB_TEST_SIZE || '39';
 
+// Rotatievenster op {Created Time}, in uren sinds aanmaak.
+// Standaard: 0-48u erin, 48-72u eruit, 72-96u weer erin, daarna niet meer.
+// WTB Market klaagt als dezelfde lijst dagen achtereen ongewijzigd blijft.
+const VENSTER_A_EIND = Number(process.env.WTB_WINDOW_A_END || 48);
+const VENSTER_B_START = Number(process.env.WTB_WINDOW_B_START || 72);
+const VENSTER_B_EIND = Number(process.env.WTB_WINDOW_B_END || 96);
+
+const UITGESLOTEN_STORE = process.env.WTB_EXCLUDE_STORE ?? 'SneakerAsk';
+
+const LEEFTIJD = `DATETIME_DIFF(NOW(), {Created Time}, 'hours')`;
+
 /** Velden die we uit Airtable ophalen (klein houden = sneller). */
 export const EXPORT_FIELDS = [
   'Order ID',
@@ -70,6 +81,26 @@ export const PROFILES = {
       OPEN_OUTSOURCE,
       '{Outsource Start Time} != BLANK()',
       `DATETIME_DIFF(NOW(), {Outsource Start Time}, 'hours') >= 72`
+    ),
+  },
+
+  rotating: {
+    description:
+      `Outsource, niet van ${UITGESLOTEN_STORE}, en ${VENSTER_A_EIND}u erin / ` +
+      `${VENSTER_B_START - VENSTER_A_EIND}u eruit / ` +
+      `${VENSTER_B_EIND - VENSTER_B_START}u weer erin, op Created Time.`,
+    formula: and(
+      '{Fulfillment Status} = "Outsource"',
+      UITGESLOTEN_STORE ? `ARRAYJOIN({Store Name}) != ${quote(UITGESLOTEN_STORE)}` : '',
+      '{SKU} != BLANK()',
+      '{Size} != BLANK()',
+      `OR(
+        ${LEEFTIJD} < ${VENSTER_A_EIND},
+        AND(
+          ${LEEFTIJD} >= ${VENSTER_B_START},
+          ${LEEFTIJD} < ${VENSTER_B_EIND}
+        )
+      )`
     ),
   },
 
