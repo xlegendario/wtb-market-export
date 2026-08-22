@@ -1,0 +1,38 @@
+# Render Cron Job: draait één keer per dag, doet zijn werk, en stopt.
+# Geen always-on instance nodig.
+#
+# LET OP: Render's cron schedules staan in UTC. "0 10 * * *" is 12:00 in
+# Amsterdam tijdens zomertijd en 11:00 tijdens wintertijd. Wil je het hele jaar
+# strak op 12:00, pas het schema dan twee keer per jaar aan.
+services:
+  - type: cron
+    name: wtb-market-export
+    runtime: node
+    plan: starter
+    schedule: '0 10 * * *'
+    buildCommand: npm install
+    startCommand: node scripts/run-profile.js --today
+    envVars:
+      - key: TZ
+        value: Europe/Amsterdam
+      - key: AIRTABLE_ORDERS_TABLE
+        value: Unfulfilled Orders Log
+      - key: WTB_API_BASE_URL
+        value: https://api.wtbmarket.eu
+      - key: WTB_SIZE_MODE
+        value: raw
+      # Welke filter op welke dag. Zonder entry voor vandaag doet de run niets.
+      - key: WTB_DAILY_PROFILES
+        value: default=ready
+      # Leeg laten = nooit items van de WTB-lijst verwijderen.
+      - key: WTB_PRUNE_PROFILES
+        value: ''
+      # Secrets: in het Render dashboard invullen, niet hier.
+      - key: AIRTABLE_TOKEN
+        sync: false
+      - key: AIRTABLE_BASE_ID
+        sync: false
+      - key: WTB_API_KEY
+        sync: false
+      - key: WTB_USER_ID
+        sync: false
