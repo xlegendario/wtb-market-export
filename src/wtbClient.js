@@ -128,10 +128,17 @@ export class WtbClient {
    * Dit betekent ook dat een tweede `add` op dezelfde maat de quantity ophoogt.
    */
 
-  /** Hele SKU (alle maten) van de lijst halen. */
+  /**
+   * Hele SKU (alle maten) van de lijst halen.
+   *
+   * De methode is DELETE, niet POST. De docs van WTB Market zeggen POST, maar
+   * dat geeft "Cannot POST /user/list/manage/delete" (Express 404). Geverifieerd
+   * op 2026-08-22: DELETE geeft { ok: true, data: { message: "item deleted" } }.
+   * Ook de body mag alleen `sku` bevatten — met `size` erbij volgt NOT_FOUND.
+   */
   async deleteSku(sku) {
     return this.request(ENDPOINTS.delete, {
-      method: 'POST',
+      method: 'DELETE',
       body: { sku: normalizeSku(sku) },
     });
   }
