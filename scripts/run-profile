@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+import { config, assertConfig } from '../src/config.js';
+import { listProfiles } from '../src/profiles.js';
+import { runProfile } from '../src/sync.js';
+import { profileForToday } from '../src/dailySchedule.js';
+
+const args = process.argv.slice(2);
+const flags = new Set(args.filter((a) => a.startsWith('-')));
+const dryRun = flags.has('--dry-run');
+const prune = flags.has('--prune') ? true : flags.has('--no-prune') ? false : undefined;
+const useToday = flags.has('--today');
+
+let profileName = args.find((a) => !a.startsWith('-'));
+
+if (useToday) {
+  // Eén Render Cron Job kan zo elke dag een ander profiel draaien.
+  const { day, profile } = profileForToday(config.dailyProfiles, config.timezone);
+  if (!profile) {
+    console.log(`Geen profiel ingesteld voor ${day || 'vandaag'} — niets te doen.`);
+    process.exit(0);
+  }
+  console.log(`Vandaag (${day}) -> profiel "${profile}"`);
+  profileName = profile;
+}
+
+if (!profileName) {
+  console.log('Gebruik: node scripts/run-profile.js <profiel> [--dry-run] [--prune|--no-prune]');
+  console.log('         node scripts/run-profile.js --today          # profiel uit WTB_DAILY_PROFILES\n');
+  console.log('Profielen:');
+  for (const p of listProfiles()) console.log(`  ${p.name.padEnd(14)} ${p.description}`);
+  process.exit(1);
+}
+
+assertConfig();
+
+const summary = await runProfile(profileName, { dryRun, prune });
+
+console.log(`\nProfiel:        ${summary.profile}${summary.dryRun ? '  (DRY RUN)' : ''}`);
+console.log(`Airtable hits:  ${summary.records}`);
+console.log(`Unieke items:   ${summary.desired}`);
+console.log(`Al op lijst:    ${summary.currentOnList} (herkend: ${summary.listRecognized})`);
+console.log(`Toegevoegd:     ${summary.added.length}`);
+console.log(`Verwijderd:     ${summary.removed.length}`);
+console.log(`Overgeslagen:   ${summary.skipped.length}`);
+
+if (summary.skipped.length) {
+  console.log('\nOvergeslagen records:');
+  for (const s of summary.skipped.slice(0, 25)) {
+    console.log(`  ${s.orderId} ${s.sku || ''} -> ${s.reason}`);
+  }
+}
+
+if (summary.errors.length) {
+  console.log('\nFouten:');
+  for (const e of summary.errors) console.log(`  ${e}`);
+  process.exitCode = 1;
+}
