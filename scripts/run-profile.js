@@ -62,20 +62,13 @@ if (summary.readded.length) {
   );
 }
 console.log(`Overgeslagen:   ${summary.skipped.length}`);
-// Een NOT_FOUND op /add zegt niets: de add landt vaak alsnog. Deze twee
-// regels laten zien hoeveel van de afwijzingen loos alarm waren, zodat het
-// getal eronder alleen nog over echte mislukkingen gaat.
+// Een NOT_FOUND op /add zegt niets over de uitkomst: de maat komt er toch
+// op, alleen later. Deze regel telt hoeveel afwijzingen loos alarm waren.
 if (summary.landdeAlsnog) {
   console.log(`Toch gelukt (404 was loos): ${summary.landdeAlsnog}`);
 }
-if (summary.geslaagdNaRetry) {
-  console.log(`Gelukt bij tweede poging:  ${summary.geslaagdNaRetry}`);
-}
-if (summary.retryOvergeslagen) {
-  console.log(`Geen 2e poging (geen prune): ${summary.retryOvergeslagen}`);
-}
 if (summary.unavailable.length) {
-  console.log(`Echt niet gelukt:          ${summary.unavailable.length}`);
+  console.log(`Nog niet zichtbaar:        ${summary.unavailable.length}`);
 }
 
 if (showList) {
@@ -94,7 +87,7 @@ if (summary.skipped.length) {
 
 if (summary.unavailable.length) {
   console.log('');
-  console.log('Staat na twee pogingen nog steeds niet op de lijst:');
+  console.log('Stond na de controle nog niet op de lijst (komt er meestal alsnog):');
   for (const u of summary.unavailable) {
     console.log(`  ${u.sku} maat ${u.size} -> ${u.reden || 'geen melding'}`);
   }
