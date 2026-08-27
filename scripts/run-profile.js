@@ -62,6 +62,9 @@ if (summary.readded.length) {
   );
 }
 console.log(`Overgeslagen:   ${summary.skipped.length}`);
+if (summary.unavailable.length) {
+  console.log(`Niet in WTB-catalogus: ${summary.unavailable.length}`);
+}
 
 if (showList) {
   console.log('');
@@ -75,6 +78,12 @@ if (summary.skipped.length) {
   for (const s of summary.skipped.slice(0, 25)) {
     console.log(`  ${s.orderId} ${s.sku || ''} -> ${s.reason}`);
   }
+}
+
+if (summary.unavailable.length) {
+  console.log('');
+  console.log('WTB Market kent deze SKUs niet (blijvend, geen storing):');
+  for (const u of summary.unavailable) console.log(`  ${u.sku} maat ${u.size}`);
 }
 
 if (summary.errors.length) {
