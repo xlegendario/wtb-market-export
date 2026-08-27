@@ -27,8 +27,12 @@ export const config = {
     apiKeyHeader: process.env.WTB_API_KEY_HEADER || 'key',
     // `user_id` header = jouw Discord ID.
     userId: process.env.WTB_USER_ID || '',
-    requestDelayMs: num(process.env.WTB_REQUEST_DELAY_MS, 250),
-    maxRetries: num(process.env.WTB_MAX_RETRIES, 3),
+    // 250ms bleek te snel: 42 adds in ~11s (ruim 200/min) leverde HTTP 429 op.
+    // 2000ms = 30 requests/min, ruim onder de grens waar het misging.
+    requestDelayMs: num(process.env.WTB_REQUEST_DELAY_MS, 2000),
+    maxRequestDelayMs: num(process.env.WTB_MAX_REQUEST_DELAY_MS, 10000),
+    rateLimitBackoffMs: num(process.env.WTB_RATE_LIMIT_BACKOFF_MS, 15000),
+    maxRetries: num(process.env.WTB_MAX_RETRIES, 4),
     timeoutMs: num(process.env.WTB_TIMEOUT_MS, 15000),
   },
 
