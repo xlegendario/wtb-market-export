@@ -23,9 +23,21 @@
  *   node scripts/probe-add.js JS1589 42          # eerst alleen lezen
  *   node scripts/probe-add.js JS1589 42 --write  # ook echt proberen
  */
-import { config, assertConfig } from '../src/config.js';
+// Bewust niet assertConfig(): die eist ook de Airtable-sleutels, en die
+// heeft dit script niet nodig. Alleen wat er echt gebruikt wordt, zodat je
+// lokaal met twee regels in .env aan de slag kunt.
+import { config } from '../src/config.js';
 
-assertConfig();
+const ontbreekt = [
+  ['WTB_API_KEY', config.wtb.apiKey],
+  ['WTB_USER_ID', config.wtb.userId],
+].filter(([, v]) => !v).map(([n]) => n);
+
+if (ontbreekt.length) {
+  console.log(`Ontbrekende env vars: ${ontbreekt.join(', ')}`);
+  console.log('Zet ze in .env in deze map, of draai dit in de Render shell.');
+  process.exit(1);
+}
 
 const sku = process.argv[2];
 const size = process.argv[3];
