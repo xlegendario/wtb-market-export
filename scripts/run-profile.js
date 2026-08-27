@@ -62,8 +62,20 @@ if (summary.readded.length) {
   );
 }
 console.log(`Overgeslagen:   ${summary.skipped.length}`);
+// Een NOT_FOUND op /add zegt niets: de add landt vaak alsnog. Deze twee
+// regels laten zien hoeveel van de afwijzingen loos alarm waren, zodat het
+// getal eronder alleen nog over echte mislukkingen gaat.
+if (summary.landdeAlsnog) {
+  console.log(`Toch gelukt (404 was loos): ${summary.landdeAlsnog}`);
+}
+if (summary.geslaagdNaRetry) {
+  console.log(`Gelukt bij tweede poging:  ${summary.geslaagdNaRetry}`);
+}
+if (summary.retryOvergeslagen) {
+  console.log(`Geen 2e poging (geen prune): ${summary.retryOvergeslagen}`);
+}
 if (summary.unavailable.length) {
-  console.log(`Afgewezen door WTB Market: ${summary.unavailable.length}`);
+  console.log(`Echt niet gelukt:          ${summary.unavailable.length}`);
 }
 
 if (showList) {
@@ -82,7 +94,7 @@ if (summary.skipped.length) {
 
 if (summary.unavailable.length) {
   console.log('');
-  console.log('Afgewezen door WTB Market met NOT_FOUND (reden onbekend):');
+  console.log('Staat na twee pogingen nog steeds niet op de lijst:');
   for (const u of summary.unavailable) {
     console.log(`  ${u.sku} maat ${u.size} -> ${u.reden || 'geen melding'}`);
   }
