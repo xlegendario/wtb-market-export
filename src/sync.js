@@ -232,7 +232,7 @@ export async function runProfile(profileName, options = {}) {
         summary.readded.push({ sku: plan.sku, size: s.size, quantity: s.quantity });
       } catch (err) {
         if (err.code === 'NOT_FOUND') {
-          summary.unavailable.push({ sku: plan.sku, size: s.size });
+          summary.unavailable.push({ sku: plan.sku, size: s.size, reden: err.message });
         } else {
           // Volgende run herstelt dit: de maat mist dan simpelweg op de lijst.
           summary.errors.push(`terugzetten ${plan.sku} ${s.size}: ${err.message}`);
@@ -251,8 +251,23 @@ export async function runProfile(profileName, options = {}) {
       summary.added.push(item);
     } catch (err) {
       if (err.code === 'NOT_FOUND') {
-        // WTB Market kent deze SKU niet in hun catalogus. Blijvend, geen storing.
-        summary.unavailable.push({ sku: item.sku, size: item.size, orders: item.orders });
+        // NOT_FOUND betekent NIET "deze SKU staat niet in hun catalogus".
+        // Hier stond die uitleg wel, en die was fout: JS1589 maat 42 kreeg
+        // NOT_FOUND terwijl die maat gewoon op hun productpagina staat
+        // (gecontroleerd op 2026-08-27). Dezelfde code komt ook terug op een
+        // delete met een `size` in de body - een verzoek dat prima had gekund
+        // als de body anders was. NOT_FOUND is bij deze API dus een algemene
+        // afwijzing, geen uitspraak over hun catalogus.
+        //
+        // Waarom deze maat wordt afgewezen is nog onbekend. De reden gaat mee
+        // in de samenvatting zodat de volgende run meer vertelt dan alleen
+        // het feit dat het misging.
+        summary.unavailable.push({
+          sku: item.sku,
+          size: item.size,
+          orders: item.orders,
+          reden: err.message,
+        });
       } else {
         summary.errors.push(`add ${item.sku} ${item.size}: ${err.message}`);
       }
