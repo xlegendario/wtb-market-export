@@ -11,12 +11,21 @@ function sleep(ms) {
 }
 
 /** Fout waarop opnieuw proberen zinloos is (onze fout, niet die van het netwerk). */
-function fatal(message) {
-  return Object.assign(new Error(message), { retryable: false });
+function fatal(message, code) {
+  return Object.assign(new Error(message), { retryable: false, code });
 }
 
 function describe(text) {
   return String(text || '').slice(0, 300);
+}
+
+/** Haalt error.code uit de envelope, ook als de HTTP-status al niet ok was. */
+function codeUit(text) {
+  try {
+    return JSON.parse(text)?.error?.code;
+  } catch {
+    return undefined;
+  }
 }
 
 export class WtbClient {
@@ -26,9 +35,12 @@ export class WtbClient {
     this.apiKeyHeader = cfg.apiKeyHeader;
     this.userId = cfg.userId;
     this.requestDelayMs = cfg.requestDelayMs;
+    this.maxRequestDelayMs = cfg.maxRequestDelayMs;
+    this.rateLimitBackoffMs = cfg.rateLimitBackoffMs;
     this.maxRetries = cfg.maxRetries;
     this.timeoutMs = cfg.timeoutMs;
     this.lastRequestAt = 0;
+    this.rateLimitHits = 0;
   }
 
   headers() {
@@ -65,14 +77,35 @@ export class WtbClient {
 
         const text = await res.text().catch(() => '');
 
-        if (res.status === 429 || res.status >= 500) {
+        if (res.status === 429) {
+          // Hun rate limit is strenger dan een paar seconden backoff aankan.
+          // Vertraag ook alle volgende requests, anders lopen we er zo weer in.
+          this.rateLimitHits++;
+          // Ondergrens van 500ms: verdubbelen vanaf 0 blijft 0.
+          this.requestDelayMs = Math.min(
+            Math.max(this.requestDelayMs * 2, 500),
+            this.maxRequestDelayMs
+          );
+
+          const header = Number(res.headers.get('retry-after'));
+          const wait =
+            Number.isFinite(header) && header > 0
+              ? header * 1000
+              : this.rateLimitBackoffMs * 2 ** attempt;
+
+          lastError = new Error(`WTB 429: ${describe(text)}`);
+          await sleep(wait);
+          continue;
+        }
+
+        if (res.status >= 500) {
           lastError = new Error(`WTB ${res.status} ${res.statusText}: ${describe(text)}`);
-          await sleep(500 * 2 ** attempt);
+          await sleep(1000 * 2 ** attempt);
           continue;
         }
 
         if (!res.ok) {
-          throw fatal(`WTB ${res.status} ${res.statusText}: ${describe(text)}`);
+          throw fatal(`WTB ${res.status} ${res.statusText}: ${describe(text)}`, codeUit(text));
         }
 
         if (!text) return { raw: '', json: null };
@@ -87,7 +120,8 @@ export class WtbClient {
         // De API antwoordt met { ok, data, meta, error }. Een 200 met ok:false
         // is een mislukking — die mag niet als succes doorgaan.
         if (json && json.ok === false) {
-          throw fatal(`WTB ${json.error?.code || 'ERROR'}: ${json.error?.message || describe(text)}`);
+          const code = json.error?.code || 'ERROR';
+          throw fatal(`WTB ${code}: ${json.error?.message || describe(text)}`, code);
         }
 
         return { raw: text, json };
