@@ -136,6 +136,7 @@ export async function runProfile(profileName, options = {}) {
     added: [],
     removed: [],
     readded: [],
+    unavailable: [],
     skipped: [],
     errors: [],
   };
@@ -218,8 +219,11 @@ export async function runProfile(profileName, options = {}) {
         summary.removed.push({ sku: plan.sku, size: r.size, van: r.quantity, naar: r.wanted });
       }
     } catch (err) {
-      summary.errors.push(`delete ${plan.sku}: ${err.message}`);
-      continue; // niets terugzetten als het wissen niet lukte
+      if (err.code !== 'NOT_FOUND') {
+        summary.errors.push(`delete ${plan.sku}: ${err.message}`);
+        continue; // niets terugzetten als het wissen niet lukte
+      }
+      // NOT_FOUND = stond er al niet meer. Gewoon doorgaan met opbouwen.
     }
 
     for (const s of plan.sizes) {
@@ -227,8 +231,12 @@ export async function runProfile(profileName, options = {}) {
         for (let i = 0; i < s.quantity; i++) await client.addSize(plan.sku, s.size);
         summary.readded.push({ sku: plan.sku, size: s.size, quantity: s.quantity });
       } catch (err) {
-        // Volgende run herstelt dit: de maat mist dan simpelweg op de lijst.
-        summary.errors.push(`terugzetten ${plan.sku} ${s.size}: ${err.message}`);
+        if (err.code === 'NOT_FOUND') {
+          summary.unavailable.push({ sku: plan.sku, size: s.size });
+        } else {
+          // Volgende run herstelt dit: de maat mist dan simpelweg op de lijst.
+          summary.errors.push(`terugzetten ${plan.sku} ${s.size}: ${err.message}`);
+        }
       }
     }
   }
@@ -242,7 +250,12 @@ export async function runProfile(profileName, options = {}) {
       for (let i = 0; i < item.times; i++) await client.addSize(item.sku, item.size);
       summary.added.push(item);
     } catch (err) {
-      summary.errors.push(`add ${item.sku} ${item.size}: ${err.message}`);
+      if (err.code === 'NOT_FOUND') {
+        // WTB Market kent deze SKU niet in hun catalogus. Blijvend, geen storing.
+        summary.unavailable.push({ sku: item.sku, size: item.size, orders: item.orders });
+      } else {
+        summary.errors.push(`add ${item.sku} ${item.size}: ${err.message}`);
+      }
     }
   }
 
